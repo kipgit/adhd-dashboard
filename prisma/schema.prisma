@@ -37,6 +37,7 @@ model User {
   celebrations       Celebration[]
   googleCalendarAuth GoogleCalendarAuth?
   bodyDoublingSessions BodyDoublingSession[]
+  writingClaims      WritingClaim[]
 
   @@index([email])
 }
@@ -72,6 +73,10 @@ model UserPreferences {
   // Notification preferences
   gentleRemindersEnabled Boolean @default(true)
   neverUseShameLanguage  Boolean @default(true)
+
+  // Writing support preferences
+  writingSupportLevel    SupportLevel @default(MODERATE)
+  writingCelebrations    Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -121,6 +126,90 @@ model BrainDump {
 
   @@index([userId, createdAt])
   @@index([userId, convertedToTask])
+}
+
+// ============================================================================
+// WRITING CLAIMS - Guided claim construction for students with exceptionalities
+// ============================================================================
+
+model WritingClaim {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Core content
+  title         String   // Topic or assignment name
+  subject       String?  // e.g., "English", "History", "Science"
+  sourceText    String?  // Optional source text/passage to analyze
+  sourceTitle   String?  // Title of source (book, article, etc.)
+
+  // Support configuration
+  supportLevel  SupportLevel @default(MODERATE)
+
+  // Current state
+  status        ClaimStatus @default(IN_PROGRESS)
+  currentStep   Int @default(0)
+
+  // Final outputs
+  finalClaim    String? // The completed claim statement
+  completedAt   DateTime?
+
+  // Progress tracking
+  steps         ClaimStep[]
+  sentenceFrame SentenceFrame?
+
+  // Timestamps
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId, status])
+  @@index([userId, createdAt])
+}
+
+model ClaimStep {
+  id        String   @id @default(cuid())
+  claimId   String
+  claim     WritingClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+
+  // Step metadata
+  stepNumber      Int
+  stepType        StepType // PROBE, BRAINSTORM, EVIDENCE, REASONING, REFINEMENT
+
+  // AI-generated guidance
+  question        String   // The probing question
+  hint            String?  // Additional hint or explanation
+  sentenceStarters String[] // Array of sentence starter options
+
+  // Student response
+  studentResponse String?
+  isCompleted     Boolean @default(false)
+  completedAt     DateTime?
+
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([claimId, stepNumber])
+}
+
+model SentenceFrame {
+  id        String   @id @default(cuid())
+  claimId   String   @unique
+  claim     WritingClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+
+  // Frame templates (varying support levels)
+  minimalSupport  String // Least scaffolding - just basic structure
+  moderateSupport String // Medium scaffolding - more guidance
+  maximumSupport  String // Maximum scaffolding - detailed prompts
+
+  // Fill-in components (extracted from student responses)
+  fillableSlots   Json   // { slot1: "topic", slot2: "position", slot3: "reason", etc. }
+
+  // Generated hints for each blank
+  slotHints       Json   // { slot1: "What is the main topic?", slot2: "What do you think?", etc. }
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 // ============================================================================
@@ -413,4 +502,24 @@ enum CelebrationType {
   SHOWING_UP
   MILESTONE
   FIRST_TIME
+}
+
+enum SupportLevel {
+  MINIMAL      // Basic structure only
+  MODERATE     // Balanced scaffolding
+  MAXIMUM      // Extensive support and prompts
+}
+
+enum ClaimStatus {
+  IN_PROGRESS  // Student is working on it
+  COMPLETED    // Claim is finished
+  ARCHIVED     // Saved for later reference
+}
+
+enum StepType {
+  PROBE        // Initial probing question
+  BRAINSTORM   // Idea generation
+  EVIDENCE     // Gathering evidence/examples
+  REASONING    // Connecting ideas
+  REFINEMENT   // Polishing the claim
 }
