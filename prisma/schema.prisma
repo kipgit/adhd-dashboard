@@ -1,0 +1,416 @@
+// ADHD Dashboard Database Schema
+// Design Philosophy: Flexibility over rigidity, grace over guilt
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// USER MANAGEMENT
+// ============================================================================
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Energy tracking
+  currentEnergyLevel EnergyLevel @default(MEDIUM)
+  energyLogs         EnergyLog[]
+
+  // Preferences
+  preferences        UserPreferences?
+
+  // Relations
+  brainDumps         BrainDump[]
+  tasks              Task[]
+  routines           Routine[]
+  rewards            Reward[]
+  celebrations       Celebration[]
+  googleCalendarAuth GoogleCalendarAuth?
+  bodyDoublingSessions BodyDoublingSession[]
+
+  @@index([email])
+}
+
+model UserPreferences {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Survival mode settings
+  survivalModeEnabled    Boolean @default(false)
+  survivalModeTaskLimit  Int     @default(3) // Show max 3 tasks in survival mode
+
+  // Accessibility
+  reducedMotion          Boolean @default(false)
+  highContrast           ContrastLevel @default(STANDARD)
+  dyslexicFont           Boolean @default(false)
+  screenReaderOptimized  Boolean @default(false)
+
+  // Task preferences
+  defaultTaskBreakdown   Boolean @default(true)
+  autoArchiveDays        Int     @default(30)
+  celebrationsEnabled    Boolean @default(true)
+
+  // Time preferences
+  timeBlindnessMode      Boolean @default(false) // Use tangible time references
+  pomodoroLength         Int     @default(25) // minutes
+  pomodoroBreakLength    Int     @default(5)  // minutes
+
+  // Energy pattern learning
+  energyTrackingEnabled  Boolean @default(true)
+
+  // Notification preferences
+  gentleRemindersEnabled Boolean @default(true)
+  neverUseShameLanguage  Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model EnergyLog {
+  id          String      @id @default(cuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  energyLevel EnergyLevel
+  timestamp   DateTime    @default(now())
+  notes       String?
+
+  @@index([userId, timestamp])
+}
+
+// ============================================================================
+// BRAIN DUMPS - Frictionless thought capture
+// ============================================================================
+
+model BrainDump {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Core content
+  content   String   // The raw thought
+  audioUrl  String?  // Original voice recording if captured via voice
+
+  // AI-powered categorization
+  category          BrainDumpCategory?
+  suggestedEnergy   EnergyLevel?
+  isUrgent          Boolean @default(false)
+  isImportant       Boolean @default(false)
+
+  // Conversion tracking
+  convertedToTask   Boolean @default(false)
+  convertedTaskId   String?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Optional time display (time blindness accommodation)
+  showTimestamp Boolean @default(false)
+
+  @@index([userId, createdAt])
+  @@index([userId, convertedToTask])
+}
+
+// ============================================================================
+// TASKS - Energy-based, flexible, forgiving
+// ============================================================================
+
+model Task {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Core fields
+  title           String
+  description     String?
+
+  // Energy-based scheduling
+  energyRequired  EnergyLevel
+  estimatedMinutes Int?
+  tangibleTimeRef String? // "About 1 movie length" instead of "2 hours"
+
+  // Status
+  status          TaskStatus @default(TODO)
+  completedAt     DateTime?
+
+  // Flexible deadlines with grace
+  dueDate         DateTime?
+  gracePeriodDays Int @default(3)
+  isFlexible      Boolean @default(true)
+
+  // Task breakdown
+  hasBreakdown    Boolean @default(false)
+  steps           TaskStep[]
+
+  // First action (activation energy reducer)
+  firstPhysicalAction String?
+
+  // Priority (without guilt)
+  isQuickWin      Boolean @default(false) // Under 5 minutes
+  isTopThree      Boolean @default(false) // Today's top 3
+
+  // Gamification
+  rewardPoints    Int @default(0)
+  difficulty      TaskDifficulty @default(MEDIUM)
+
+  // Context
+  tags            String[]
+  project         String?
+
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  archivedAt      DateTime?
+  lastTouchedAt   DateTime @default(now()) // Track engagement
+
+  @@index([userId, status])
+  @@index([userId, dueDate])
+  @@index([userId, energyRequired])
+  @@index([userId, isTopThree])
+}
+
+model TaskStep {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  order         Int
+  description   String
+  isCompleted   Boolean @default(false)
+  estimatedMinutes Int @default(2) // All steps should be micro (2-10 min)
+
+  completedAt   DateTime?
+
+  @@index([taskId, order])
+}
+
+// ============================================================================
+// ROUTINES - Morning/transition/evening rituals
+// ============================================================================
+
+model Routine {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name        String
+  type        RoutineType
+  description String?
+
+  // Steps
+  steps       RoutineStep[]
+
+  // Scheduling
+  timeOfDay   String? // "morning", "afternoon", "evening", or specific time
+  daysOfWeek  Int[] // 0-6, where 0 is Sunday
+
+  // Tracking
+  isActive    Boolean @default(true)
+  lastStarted DateTime?
+  completionCount Int @default(0)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId, type])
+  @@index([userId, isActive])
+}
+
+model RoutineStep {
+  id         String  @id @default(cuid())
+  routineId  String
+  routine    Routine @relation(fields: [routineId], references: [id], onDelete: Cascade)
+
+  order           Int
+  description     String
+  hasTimer        Boolean @default(false)
+  timerMinutes    Int?
+  isOptional      Boolean @default(false)
+
+  @@index([routineId, order])
+}
+
+model RoutineSession {
+  id         String   @id @default(cuid())
+  routineId  String
+  userId     String
+
+  startedAt  DateTime @default(now())
+  completedAt DateTime?
+
+  stepsCompleted Int @default(0)
+  totalSteps     Int
+
+  @@index([userId, startedAt])
+}
+
+// ============================================================================
+// REWARDS - Dopamine hits on demand
+// ============================================================================
+
+model Reward {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+  pointCost   Int
+  category    RewardCategory
+
+  // Usage tracking
+  timesRedeemed Int @default(0)
+  lastRedeemed  DateTime?
+
+  isActive    Boolean @default(true)
+  createdAt   DateTime @default(now())
+
+  @@index([userId, isActive])
+}
+
+model Celebration {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type        CelebrationType
+  message     String
+  animationType String? // For frontend animation selection
+
+  // Context
+  triggerType String // "streak", "completion", "courage", "showing_up"
+  metadata    Json?  // Flexible data about what triggered celebration
+
+  createdAt   DateTime @default(now())
+  acknowledged Boolean @default(false)
+
+  @@index([userId, acknowledged])
+}
+
+// ============================================================================
+// INTEGRATIONS
+// ============================================================================
+
+model GoogleCalendarAuth {
+  id           String @id @default(cuid())
+  userId       String @unique
+  user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+
+  syncEnabled  Boolean @default(true)
+  lastSync     DateTime?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model BodyDoublingSession {
+  id          String   @id @default(cuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  title       String
+  description String?
+
+  scheduledStart DateTime
+  scheduledEnd   DateTime
+
+  roomUrl     String?
+
+  // Presence options
+  cameraRequired Boolean @default(false)
+  audioOnly      Boolean @default(false)
+  silentPresence Boolean @default(true)
+
+  // Participation
+  maxParticipants Int @default(10)
+  currentCount    Int @default(0)
+
+  createdAt   DateTime @default(now())
+
+  @@index([scheduledStart])
+  @@index([userId])
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum EnergyLevel {
+  HIGH
+  MEDIUM
+  LOW
+  CREATIVE // Special state for creative/hyperfocus tasks
+}
+
+enum ContrastLevel {
+  STANDARD
+  HIGH
+  MAXIMUM
+}
+
+enum BrainDumpCategory {
+  URGENT
+  IMPORTANT
+  CREATIVE
+  LOW_ENERGY
+  PERSONAL
+  WORK
+  IDEAS
+  LATER
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  BLOCKED
+  COMPLETED
+  ARCHIVED
+}
+
+enum TaskDifficulty {
+  EASY
+  MEDIUM
+  HARD
+  OVERWHELMING
+}
+
+enum RoutineType {
+  MORNING
+  TRANSITION
+  EVENING
+  CUSTOM
+}
+
+enum RewardCategory {
+  SMALL_TREAT
+  BREAK_TIME
+  CREATIVE_TIME
+  SOCIAL
+  SELF_CARE
+  ENTERTAINMENT
+}
+
+enum CelebrationType {
+  STREAK
+  COMPLETION
+  COURAGE
+  SHOWING_UP
+  MILESTONE
+  FIRST_TIME
+}
