@@ -13,6 +13,7 @@ import { Card } from '@/components/ui/Card';
 import { BrainDumpInput } from '@/components/dashboard/BrainDumpInput';
 import { EnergySelector } from '@/components/dashboard/EnergySelector';
 import { TaskCard } from '@/components/dashboard/TaskCard';
+import { TaskDetailModal } from '@/components/dashboard/TaskDetailModal';
 import { api, Task, EnergyLevel } from '@/lib/api';
 import { useStore } from '@/store/useStore';
 import { getGreeting, getVibeEmoji } from '@/lib/utils';
@@ -25,6 +26,7 @@ export default function DashboardPage() {
   const [quickWins, setQuickWins] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showBrainDump, setShowBrainDump] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem('authToken');
@@ -169,6 +171,7 @@ export default function DashboardPage() {
                 <TaskCard
                   key={task.id}
                   task={task}
+                  onClick={() => setSelectedTask(task)}
                   onComplete={() => handleCompleteTask(task.id)}
                 />
               ))}
@@ -198,6 +201,7 @@ export default function DashboardPage() {
                 <TaskCard
                   key={task.id}
                   task={task}
+                  onClick={() => setSelectedTask(task)}
                   onComplete={() => handleCompleteTask(task.id)}
                 />
               ))}
@@ -205,6 +209,18 @@ export default function DashboardPage() {
           )}
         </section>
       </Container>
+
+      {/* Task Detail Modal */}
+      <TaskDetailModal
+        task={selectedTask}
+        onClose={() => setSelectedTask(null)}
+        onComplete={() => {
+          if (selectedTask) {
+            handleCompleteTask(selectedTask.id);
+            setSelectedTask(null);
+          }
+        }}
+      />
     </div>
   );
 }
